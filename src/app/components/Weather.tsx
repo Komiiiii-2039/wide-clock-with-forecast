@@ -31,13 +31,16 @@ interface WeatherData {
 
 const Weather = () => {
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [city, setCity] = useState('tsukuba'); // Default city
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchWeatherData = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const response = await fetch('/api/weather');
+        const response = await fetch(`/api/weather?city=${city}`);
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to fetch weather data');
@@ -56,7 +59,7 @@ const Weather = () => {
     const intervalId = setInterval(fetchWeatherData, 30 * 60 * 1000);
 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [city]); // Re-run effect when city changes
 
   if (loading) {
     return <div className="themed-text text-2xl">Loading weather...</div>;
@@ -77,6 +80,8 @@ const Weather = () => {
         currentWeatherIcon={weatherData.current.weather.icon}
         maxTemp={weatherData.daily.temp.max}
         minTemp={weatherData.daily.temp.min}
+        setCity={setCity} // Pass the setter function
+        currentCity={city} // Pass the current city
       />
       <MoonPhase date={new Date()} />
       <HourlyForecast hourlyData={weatherData.hourly} />

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { startOfToday, isSameDay } from 'date-fns';
 
 // Define types for OpenWeatherMap API response
@@ -23,11 +23,24 @@ interface OpenWeatherMapResponse {
   list: ForecastItem[];
 }
 
-export async function GET() {
+// --- City Coordinates Mapping ---
+const cityCoordinates: { [key: string]: { lat: number; lon: number; name: string } } = {
+  'tsukuba': { lat: 36.0833, lon: 140.0833, name: 'TSUKUBA' },
+  'tokyo': { lat: 35.6895, lon: 139.6917, name: 'TOKYO' },
+  'osaka': { lat: 34.6937, lon: 135.5023, name: 'OSAKA' },
+  'sapporo': { lat: 43.0618, lon: 141.3545, name: 'SAPPORO' },
+  'fukuoka': { lat: 33.5904, lon: 130.4017, name: 'FUKUOKA' },
+  'nagoya': { lat: 35.1815, lon: 136.9066, name: 'NAGOYA' },
+};
+
+export async function GET(request: NextRequest) {
   const apiKey = process.env.OPENWEATHERMAP_API_KEY;
-  const lat = 36.0833; // Tsukuba latitude
-  const lon = 140.0833; // Tsukuba longitude
-  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric&lang=ja`;
+  
+  // Get city from query parameters, default to Tsukuba
+  const cityKey = request.nextUrl.searchParams.get('city')?.toLowerCase() || 'tsukuba';
+  const city = cityCoordinates[cityKey] || cityCoordinates['tsukuba'];
+
+  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${city.lat}&lon=${city.lon}&appid=${apiKey}&units=metric&lang=ja`;
 
   if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
     return NextResponse.json(
@@ -49,52 +62,31 @@ export async function GET() {
 
     const data: OpenWeatherMapResponse = await response.json();
 
-    // --- Data Processing for v2.5/forecast ---
-
-    // Get today's date for filtering
+    // --- Data Processing ---
     const today = startOfToday();
-
-    // Filter for today's forecast entries
     const todaysForecasts = data.list.filter((item: ForecastItem) => 
       isSameDay(new Date(item.dt * 1000), today)
     );
-
-    // If no forecasts for today, use the first available
     const relevantForecasts = todaysForecasts.length > 0 ? todaysForecasts : data.list.slice(0, 8);
-
-    // Calculate daily min/max from today's entries
     const maxTemp = Math.max(...relevantForecasts.map((item: ForecastItem) => item.main.temp_max));
     const minTemp = Math.min(...relevantForecasts.map((item: ForecastItem) => item.main.temp_min));
-
-    // Get current weather from the first item in the list
     const currentWeather = data.list[0];
 
-    // Process hourly forecasts to get 5 entries roughly 6 hours apart
     const selectedHourlyForecasts = [];
-    const seenTimestamps = new Set(); // To ensure unique timestamps
-
-    // Start from the first forecast available
+    const seenTimestamps = new Set();
     if (data.list.length > 0) {
       selectedHourlyForecasts.push(data.list[0]);
       seenTimestamps.add(data.list[0].dt);
       let lastSelectedDt = data.list[0].dt;
-
       for (let i = 1; i < data.list.length && selectedHourlyForecasts.length < 5; i++) {
         const currentItem = data.list[i];
-        // Check if the current item's timestamp is roughly 6 hours after the last selected item
-        // And if it hasn't been added already
-        if (
-          currentItem.dt >= lastSelectedDt + (6 * 3600) &&
-          !seenTimestamps.has(currentItem.dt)
-        ) {
+        if (currentItem.dt >= lastSelectedDt + (6 * 3600) && !seenTimestamps.has(currentItem.dt)) {
           selectedHourlyForecasts.push(currentItem);
           seenTimestamps.add(currentItem.dt);
           lastSelectedDt = currentItem.dt;
         }
       }
     }
-
-    // If we still don't have 5, just take the next available unique ones
     let i = 0;
     while (selectedHourlyForecasts.length < 5 && i < data.list.length) {
         const item = data.list[i];
@@ -106,7 +98,7 @@ export async function GET() {
     }
 
     const processedData = {
-      locationName: 'TSUKUBA',
+      locationName: city.name,
       current: {
         temp: currentWeather.main.temp,
         weather: {

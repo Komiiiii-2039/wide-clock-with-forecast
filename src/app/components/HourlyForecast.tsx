@@ -12,7 +12,7 @@ interface HourlyForecastProps {
 
 const HourlyForecast = ({ hourlyData }: HourlyForecastProps) => {
   return (
-    <div className="themed-text mt-4 flex w-full max-w-lg justify-around px-4">
+    <div className="themed-text mt-8 flex w-full max-w-lg justify-around px-4">
       {hourlyData.map((hour, index) => (
         <div key={hour.dt} className="flex flex-col items-center text-center">
           <div className="mb-2 text-[clamp(1rem,3vw,1.2rem)]">
